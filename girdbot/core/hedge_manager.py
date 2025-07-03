@@ -324,31 +324,52 @@ class HedgeManager:
         """
         return self.reverse_lookup.get(hedge_order_id)
     
-    async def close_all_hedge_positions(self, strategy_id: str):
+    async def close_all_hedge_positions(self, strategy_id: str, trading_pair: str = None):
         """
         关闭指定策略的所有对冲仓位
         
         Args:
             strategy_id: 策略ID
+            trading_pair: 交易对，如果为None则使用策略配置中的交易对
         """
         if strategy_id not in self.hedge_strategies:
             logger.warning(f"策略 {strategy_id} 未初始化对冲模式")
             return
             
         hedge_config = self.hedge_strategies[strategy_id]
-        trading_pair = hedge_config["trading_pair"]
+        # 如果未提供交易对，则使用策略配置中的交易对
+        if trading_pair is None:
+            trading_pair = hedge_config["trading_pair"]
+            
         hedge_exchanges = hedge_config["exchanges"]
         
-        logger.info(f"关闭策略 {strategy_id} 的所有对冲仓位")
+        if not hedge_exchanges:
+            logger.warning(f"策略 {strategy_id} 没有配置对冲交易所")
+            return
+            
+        logger.info(f"关闭策略 {strategy_id} 的所有对冲仓位，交易对: {trading_pair}")
         
         for exchange in hedge_exchanges:
             try:
                 # 获取当前持仓
                 positions = await exchange.fetch_positions(trading_pair)
                 
+                if not positions:
+                    logger.info(f"交易所 {exchange.name} 没有 {trading_pair} 的持仓")
+                    continue
+                    
+                logger.info(f"交易所 {exchange.name} 有 {len(positions)} 个 {trading_pair} 持仓需要平仓")
+                
                 for position in positions:
-                    position_side = position["side"]
-                    position_amount = Decimal(str(position["amount"]))
+                    position_side = position.get("side")
+                    position_size = position.get("size")
+                    
+                    # 确保持仓数据有效
+                    if not position_side or not position_size:
+                        logger.warning(f"持仓数据不完整: {position}")
+                        continue
+                        
+                    position_amount = abs(float(position_size))
                     
                     if position_amount > 0:
                         # 创建市价单平仓
@@ -360,12 +381,14 @@ class HedgeManager:
                             await exchange.create_market_order(
                                 symbol=trading_pair,
                                 side=close_side,
-                                amount=position_amount
+                                amount=position_amount,
+                                reduce_only=True
                             )
+                            logger.info(f"交易所 {exchange.name} 的 {position_side} 持仓已成功平仓")
                         except Exception as e:
-                            logger.error(f"平仓失败: {e}")
+                            logger.error(f"平仓失败: {e}", exc_info=True)
             except Exception as e:
-                logger.error(f"在交易所 {exchange.name} 关闭对冲仓位失败: {e}")
+                logger.error(f"在交易所 {exchange.name} 关闭对冲仓位失败: {e}", exc_info=True)
                 
     def to_json(self) -> Dict:
         """

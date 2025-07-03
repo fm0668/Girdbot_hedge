@@ -67,11 +67,15 @@ async def main():
         if engine:
             await engine.shutdown()
             
-        # 确保所有异步任务完成
+        # 确保所有异步任务完成，但设置5秒超时
         tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
         if tasks:
-            logger.info(f"等待 {len(tasks)} 个异步任务完成...")
-            await asyncio.gather(*tasks, return_exceptions=True)
+            logger.info(f"等待 {len(tasks)} 个异步任务完成（最多5秒）...")
+            try:
+                await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=5.0)
+                logger.info("所有异步任务已完成")
+            except asyncio.TimeoutError:
+                logger.warning("等待异步任务超时，强制退出")
             
         logger.info("系统已关闭")
 
@@ -94,11 +98,15 @@ async def shutdown():
     if engine:
         await engine.shutdown()
     
-    # 确保所有异步任务完成
+    # 确保所有异步任务完成，但设置5秒超时
     tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
     if tasks:
-        logger.info(f"等待 {len(tasks)} 个异步任务完成...")
-        await asyncio.gather(*tasks, return_exceptions=True)
+        logger.info(f"等待 {len(tasks)} 个异步任务完成（最多5秒）...")
+        try:
+            await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=5.0)
+            logger.info("所有异步任务已完成")
+        except asyncio.TimeoutError:
+            logger.warning("等待异步任务超时，强制退出")
 
 if __name__ == "__main__":
     # 注册信号处理

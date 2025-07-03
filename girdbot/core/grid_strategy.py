@@ -551,12 +551,14 @@ class GridStrategy:
             return Decimal("0")
     
     async def get_exchange_precision(self) -> Tuple[Decimal, Decimal]:
-        """获取交易所对当前交易对的精度要求"""
+        """获取交易所的精度(价格和数量)"""
         try:
-            market = await self.primary_exchange.load_market(self.trading_pair)
+            # 使用正确的方法名 fetch_market_info 而不是 load_market
+            market_info = await self.primary_exchange.fetch_market_info(self.trading_pair)
             
-            price_precision_val = market.get("precision", {}).get("price")
-            amount_precision_val = market.get("precision", {}).get("amount")
+            # 安全地提取精度信息
+            price_precision_val = market_info.get('precision', {}).get('price')
+            amount_precision_val = market_info.get('precision', {}).get('amount')
 
             if price_precision_val is None or amount_precision_val is None:
                 logger.error(f"无法从交易所获取精度信息: price={price_precision_val}, amount={amount_precision_val}")
@@ -657,10 +659,41 @@ class GridStrategy:
         }
 
     async def shutdown(self):
-        """关闭策略，取消所有挂单"""
+        """关闭策略，取消所有挂单并平仓"""
         logger.info(f"正在关闭策略 {self.strategy_id}...")
         try:
+            # 先取消所有挂单
             await self.cancel_all_orders()
-            logger.info(f"策略 {self.strategy_id} 已成功关闭，所有订单已取消。")
+            
+            # 获取当前持仓并平仓
+            try:
+                positions = await self.primary_exchange.fetch_positions(self.trading_pair)
+                if positions:
+                    logger.info(f"策略 {self.strategy_id} 有 {len(positions)} 个持仓需要平仓")
+                    for position in positions:
+                        if abs(float(position.get('size', 0))) > 0:
+                            side = "sell" if position.get('side') == 'long' else "buy"
+                            try:
+                                logger.info(f"平仓 {position.get('side')} 持仓，数量: {position.get('size')}")
+                                await self.primary_exchange.create_market_order(
+                                    symbol=self.trading_pair,
+                                    side=side,
+                                    amount=abs(float(position.get('size'))),
+                                    reduce_only=True
+                                )
+                                logger.info(f"已成功平仓 {position.get('side')} 持仓")
+                            except Exception as e:
+                                logger.error(f"平仓失败: {e}", exc_info=True)
+            except Exception as e:
+                logger.error(f"获取或平仓持仓时出错: {e}", exc_info=True)
+            
+            # 同样处理对冲账户的持仓
+            if self.enable_hedge and self.hedge_manager:
+                try:
+                    await self.hedge_manager.close_all_hedge_positions(self.strategy_id, self.trading_pair)
+                except Exception as e:
+                    logger.error(f"关闭对冲持仓时出错: {e}", exc_info=True)
+            
+            logger.info(f"策略 {self.strategy_id} 已成功关闭，所有订单已取消，持仓已平仓。")
         except Exception as e:
-            logger.error(f"关闭策略 {self.strategy_id} 时取消订单失败: {e}", exc_info=True)
+            logger.error(f"关闭策略 {self.strategy_id} 时出错: {e}", exc_info=True)

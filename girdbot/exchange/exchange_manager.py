@@ -88,44 +88,28 @@ class ExchangeManager:
         logger.info(f"交易所管理器初始化完成，共 {len(self.exchanges)} 个交易所连接")
     
     async def close(self):
-        """
-        关闭所有交易所连接
-        """
-        close_tasks = []
-        for exchange_id, exchange in self.exchanges.items():
-            try:
-                task = asyncio.create_task(exchange.close())
-                close_tasks.append(task)
-                logger.info(f"正在关闭交易所 {exchange_id} 连接...")
-            except Exception as e:
-                logger.error(f"关闭交易所 {exchange_id} 连接时出错: {e}")
+        """关闭所有交易所连接"""
+        logger.info("正在关闭所有交易所连接...")
         
+        # 创建关闭任务列表
+        close_tasks = []
+        
+        # 关闭主交易所连接
+        for exchange_id, exchange in self.exchanges.items():
+            logger.info(f"正在关闭交易所 {exchange_id} 连接...")
+            close_tasks.append(asyncio.create_task(exchange.close()))
+        
+        # 等待所有交易所连接关闭（最多5秒）
         if close_tasks:
             try:
-                await asyncio.gather(*close_tasks, return_exceptions=True)
-            except Exception as e:
-                logger.error(f"关闭交易所连接时出错: {e}")
+                await asyncio.wait_for(asyncio.gather(*close_tasks, return_exceptions=True), timeout=5.0)
+            except asyncio.TimeoutError:
+                logger.warning("关闭交易所连接超时，可能有资源未正确释放")
         
-        # 等待所有可能的异步任务完成
-        await asyncio.sleep(0.5)  # 给异步任务一些时间完成
+        # 清空交易所列表
+        self.exchanges.clear()
+        self.primary_exchange = None
         
-        # 确保所有与交易所相关的任务都已完成
-        tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
-        if tasks:
-            relevant_tasks = []
-            for task in tasks:
-                task_name = task.get_name()
-                # 只等待与交易所相关的任务
-                if "exchange" in task_name.lower() or "binance" in task_name.lower() or "ccxt" in task_name.lower():
-                    relevant_tasks.append(task)
-            
-            if relevant_tasks:
-                logger.info(f"等待 {len(relevant_tasks)} 个交易所相关任务完成...")
-                try:
-                    await asyncio.wait_for(asyncio.gather(*relevant_tasks, return_exceptions=True), timeout=3.0)
-                except asyncio.TimeoutError:
-                    logger.warning("等待交易所任务超时，部分资源可能未正确释放")
-            
         logger.info("所有交易所连接已关闭")
     
     def get_exchange(self, exchange_id: str) -> Optional[ExchangeBase]:

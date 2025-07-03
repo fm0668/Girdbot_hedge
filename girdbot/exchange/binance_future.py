@@ -91,17 +91,30 @@ class BinanceFutureExchange(ExchangeBase):
             hedge_mode: True为对冲模式，False为单向模式
         """
         try:
-            # 此方法可能会因为已经是目标模式而失败，可以忽略这种错误
+            # 先检查当前的持仓模式
+            current_mode = await self.exchange.fapiPrivateGetPositionSideDual()
+            current_hedge_mode = current_mode.get('dualSidePosition', False)
+            
+            # 如果当前模式与目标模式相同，则不需要更改
+            if (current_hedge_mode and hedge_mode) or (not current_hedge_mode and not hedge_mode):
+                logger.info(f"交易所 {self.id} 已经是{'对冲' if hedge_mode else '单向'}模式，无需更改")
+                return
+            
+            # 设置持仓模式
             mode = 'hedge' if hedge_mode else 'oneWay'
             params = {'dualSidePosition': 'true' if hedge_mode else 'false'}
             await self.exchange.fapiPrivatePostPositionSideDual(params)
             logger.info(f"交易所 {self.id} 已设置为{mode}模式")
         except Exception as e:
-            # 如果错误消息表示已经处于目标模式，则忽略错误
-            if "已经处于" in str(e) or "already" in str(e).lower():
+            error_str = str(e)
+            # 处理特定的错误码
+            if '"code":-4059' in error_str and '"msg":"No need to change position side."' in error_str:
+                logger.info(f"交易所 {self.id} 已经是{'对冲' if hedge_mode else '单向'}模式，无需更改")
+            elif "已经处于" in error_str or "already" in error_str.lower():
                 logger.info(f"交易所 {self.id} 已经是{'对冲' if hedge_mode else '单向'}模式")
             else:
-                raise
+                logger.warning(f"设置对冲模式失败: {self.id} {e}")
+                # 不抛出异常，因为这不是致命错误
     
     async def close(self):
         """关闭交易所连接"""
