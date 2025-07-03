@@ -155,19 +155,37 @@ class ExchangeManager:
         Returns:
             对冲交易所实例列表
         """
-        # 对冲交易所是那些配置中标记为is_hedge=True的交易所
+        # 对冲交易所是那些配置中标记为is_hedge=True的交易所，
+        # 或者account_alias包含"hedge"的交易所
         hedge_exchanges = []
         for config in self.exchange_configs:
             is_hedge = config.get('is_hedge', False)
-            account_alias = config.get('account_alias')
+            account_alias = config.get('account_alias', '')
             
-            if is_hedge and account_alias:
+            # 检查是否是对冲账户（通过配置或命名约定）
+            if is_hedge or (account_alias and 'hedge' in account_alias.lower()):
                 exchange_id = f"{config.get('name')}_{account_alias}"
                 exchange = self.exchanges.get(exchange_id)
                 if exchange:
                     hedge_exchanges.append(exchange)
+                    logger.info(f"找到对冲交易所: {exchange_id}")
+        
+        if not hedge_exchanges:
+            logger.warning("未找到任何对冲交易所")
         
         return hedge_exchanges
+    
+    def get_hedge_exchange(self) -> Optional[ExchangeBase]:
+        """
+        获取主要对冲交易所实例（第一个对冲交易所）
+        
+        Returns:
+            对冲交易所实例或None
+        """
+        hedge_exchanges = self.get_hedge_exchanges()
+        if hedge_exchanges:
+            return hedge_exchanges[0]
+        return None
     
     def get_all_exchanges(self) -> List[ExchangeBase]:
         """

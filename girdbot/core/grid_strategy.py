@@ -101,7 +101,17 @@ class GridStrategy:
         self.end_price = Decimal(str(config["high_price"]))
         self.grid_levels = config["grid_number"]
         self.total_investment = Decimal(str(config["investment"]))
+        
+        # 检查是否启用对冲模式（可能在顶级配置或exchanges子配置中）
         self.enable_hedge = config.get("enable_hedge", False)
+        
+        # 如果顶级配置没有enable_hedge，检查exchanges子配置
+        if not self.enable_hedge and "exchanges" in config:
+            for exchange_config in config["exchanges"]:
+                if exchange_config.get("hedge_mode", False):
+                    self.enable_hedge = True
+                    break
+        
         self.order_type = config.get("order_type", "limit")
         self.is_future = config.get("is_future", True)
         
@@ -137,6 +147,22 @@ class GridStrategy:
         if not self.primary_exchange:
             logger.error(f"策略 {self.strategy_id} 初始化失败：没有找到主交易所")
             return False
+        
+        # 记录对冲模式状态
+        if self.enable_hedge:
+            logger.info(f"策略 {self.strategy_id} 已启用对冲模式")
+            if self.hedge_manager:
+                logger.info(f"对冲管理器已就绪")
+                # 获取对冲交易所
+                hedge_exchanges = self.exchange_manager.get_hedge_exchanges()
+                if hedge_exchanges:
+                    logger.info(f"找到 {len(hedge_exchanges)} 个对冲交易所: {[ex.id for ex in hedge_exchanges]}")
+                else:
+                    logger.warning(f"策略 {self.strategy_id} 启用了对冲模式但未找到对冲交易所")
+            else:
+                logger.warning(f"策略 {self.strategy_id} 启用了对冲模式但对冲管理器未初始化")
+        else:
+            logger.info(f"策略 {self.strategy_id} 未启用对冲模式")
             
         try:
             # 检查当前价格
@@ -171,9 +197,13 @@ class GridStrategy:
         # 初始化对冲模式(如果启用)
         if self.enable_hedge and self.hedge_manager:
             try:
-                await self.hedge_manager.initialize_for_strategy(self)
+                hedge_init_success = await self.hedge_manager.initialize_for_strategy(self)
+                if hedge_init_success:
+                    logger.info(f"策略 {self.strategy_id} 对冲模式初始化成功")
+                else:
+                    logger.warning(f"策略 {self.strategy_id} 对冲模式初始化失败")
             except Exception as e:
-                logger.error(f"策略 {self.strategy_id} 初始化对冲管理器失败: {e}")
+                logger.error(f"策略 {self.strategy_id} 初始化对冲管理器失败: {e}", exc_info=True)
                 # 继续运行，但对冲功能可能不可用
         
         self.initialized = True
@@ -324,9 +354,17 @@ class GridStrategy:
             
             # 如果启用对冲，创建对冲卖单
             if self.enable_hedge and self.hedge_manager:
-                await self.hedge_manager.create_hedge_order(
-                    self.strategy_id, "sell", base_amount, level.price, level.id
-                )
+                logger.info(f"为买单 {order_id} 创建对冲卖单")
+                try:
+                    hedge_order_ids = await self.hedge_manager.create_hedge_order(
+                        self.strategy_id, "buy", base_amount, level.price, level.id, order_id
+                    )
+                    if hedge_order_ids:
+                        logger.info(f"成功创建 {len(hedge_order_ids)} 个对冲卖单: {hedge_order_ids}")
+                    else:
+                        logger.warning(f"未能为买单 {order_id} 创建任何对冲卖单")
+                except Exception as e:
+                    logger.error(f"创建对冲卖单失败: {e}", exc_info=True)
             
             logger.info(f"买单已创建: {order_id}")
             return order_id
@@ -374,9 +412,17 @@ class GridStrategy:
             
             # 如果启用对冲，创建对冲买单
             if self.enable_hedge and self.hedge_manager:
-                await self.hedge_manager.create_hedge_order(
-                    self.strategy_id, "buy", base_amount, level.price, level.id
-                )
+                logger.info(f"为卖单 {order_id} 创建对冲买单")
+                try:
+                    hedge_order_ids = await self.hedge_manager.create_hedge_order(
+                        self.strategy_id, "sell", base_amount, level.price, level.id, order_id
+                    )
+                    if hedge_order_ids:
+                        logger.info(f"成功创建 {len(hedge_order_ids)} 个对冲买单: {hedge_order_ids}")
+                    else:
+                        logger.warning(f"未能为卖单 {order_id} 创建任何对冲买单")
+                except Exception as e:
+                    logger.error(f"创建对冲买单失败: {e}", exc_info=True)
             
             logger.info(f"卖单已创建: {order_id}")
             return order_id
@@ -673,24 +719,59 @@ class GridStrategy:
                     for position in positions:
                         if abs(float(position.get('size', 0))) > 0:
                             side = "sell" if position.get('side') == 'long' else "buy"
+                            position_size = abs(float(position.get('size')))
                             try:
-                                logger.info(f"平仓 {position.get('side')} 持仓，数量: {position.get('size')}")
+                                logger.info(f"平仓 {position.get('side')} 持仓，数量: {position_size}")
+                                # 尝试使用reduce_only参数平仓
                                 await self.primary_exchange.create_market_order(
                                     symbol=self.trading_pair,
                                     side=side,
-                                    amount=abs(float(position.get('size'))),
+                                    amount=position_size,
                                     reduce_only=True
                                 )
                                 logger.info(f"已成功平仓 {position.get('side')} 持仓")
-                            except Exception as e:
-                                logger.error(f"平仓失败: {e}", exc_info=True)
+                            except Exception as e1:
+                                logger.error(f"使用reduce_only平仓失败: {e1}", exc_info=True)
+                                try:
+                                    # 如果reduce_only参数失败，尝试不带该参数的平仓
+                                    await self.primary_exchange.create_market_order(
+                                        symbol=self.trading_pair,
+                                        side=side,
+                                        amount=position_size
+                                    )
+                                    logger.info(f"已成功平仓 {position.get('side')} 持仓(不使用reduce_only)")
+                                except Exception as e2:
+                                    logger.error(f"平仓失败: {e2}", exc_info=True)
+                else:
+                    logger.info(f"策略 {self.strategy_id} 没有需要平仓的持仓")
+                
+                # 验证平仓结果
+                try:
+                    verification_positions = await self.primary_exchange.fetch_positions(self.trading_pair)
+                    if verification_positions:
+                        has_open_positions = False
+                        for pos in verification_positions:
+                            if abs(float(pos.get('size', 0))) > 0:
+                                has_open_positions = True
+                                logger.warning(f"{pos.get('side')} 持仓平仓失败，仍有 {pos.get('size')} 未平仓")
+                        if has_open_positions:
+                            logger.error(f"策略 {self.strategy_id} 仍有未平仓的持仓")
+                        else:
+                            logger.info(f"策略 {self.strategy_id} 所有持仓已成功平仓")
+                    else:
+                        logger.info(f"策略 {self.strategy_id} 所有持仓已成功平仓")
+                except Exception as e:
+                    logger.error(f"验证平仓结果失败: {e}", exc_info=True)
+                    
             except Exception as e:
                 logger.error(f"获取或平仓持仓时出错: {e}", exc_info=True)
             
             # 同样处理对冲账户的持仓
             if self.enable_hedge and self.hedge_manager:
                 try:
+                    logger.info(f"关闭策略 {self.strategy_id} 的对冲持仓")
                     await self.hedge_manager.close_all_hedge_positions(self.strategy_id, self.trading_pair)
+                    logger.info(f"策略 {self.strategy_id} 的对冲持仓已关闭")
                 except Exception as e:
                     logger.error(f"关闭对冲持仓时出错: {e}", exc_info=True)
             

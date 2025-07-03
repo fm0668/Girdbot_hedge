@@ -378,6 +378,7 @@ class HedgeManager:
                         logger.info(f"在交易所 {exchange.name} 平仓: {close_side} {position_amount} {trading_pair}")
                         
                         try:
+                            # 尝试使用reduce_only参数平仓
                             await exchange.create_market_order(
                                 symbol=trading_pair,
                                 side=close_side,
@@ -385,8 +386,31 @@ class HedgeManager:
                                 reduce_only=True
                             )
                             logger.info(f"交易所 {exchange.name} 的 {position_side} 持仓已成功平仓")
-                        except Exception as e:
-                            logger.error(f"平仓失败: {e}", exc_info=True)
+                        except Exception as e1:
+                            logger.error(f"使用reduce_only平仓失败: {e1}", exc_info=True)
+                            try:
+                                # 如果reduce_only参数失败，尝试不带该参数的平仓
+                                await exchange.create_market_order(
+                                    symbol=trading_pair,
+                                    side=close_side,
+                                    amount=position_amount
+                                )
+                                logger.info(f"交易所 {exchange.name} 的 {position_side} 持仓已成功平仓(不使用reduce_only)")
+                            except Exception as e2:
+                                logger.error(f"平仓失败: {e2}", exc_info=True)
+                
+                # 验证平仓结果
+                try:
+                    verification_positions = await exchange.fetch_positions(trading_pair)
+                    if verification_positions:
+                        for pos in verification_positions:
+                            if abs(float(pos.get("size", 0))) > 0:
+                                logger.warning(f"交易所 {exchange.name} 的 {pos.get('side')} 持仓平仓失败，仍有 {pos.get('size')} 未平仓")
+                    else:
+                        logger.info(f"交易所 {exchange.name} 的所有持仓已成功平仓")
+                except Exception as e:
+                    logger.error(f"验证平仓结果失败: {e}", exc_info=True)
+                    
             except Exception as e:
                 logger.error(f"在交易所 {exchange.name} 关闭对冲仓位失败: {e}", exc_info=True)
                 
