@@ -1,0 +1,64 @@
+system:
+  log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  data_dir: "./data"
+  enable_web_monitor: true  # 是否启用Web监控
+  web_host: "0.0.0.0"  # Web监控服务主机
+  web_port: 8080  # Web监控服务端口
+  update_interval: 2  # 更新间隔（秒）
+
+exchanges:
+  # 主账户配置（做多）
+  - name: "binance_future"  # 交易所名称：binance, binance_future
+    api_key: ""  # 替换为您的API密钥
+    api_secret: ""  # 替换为您的API密钥
+    is_primary: true  # 是否主账号
+    account_alias: "main_account"  # 账户别名
+    testnet: false  # 是否使用测试网络
+  
+  # 对冲账户配置（做空）
+  - name: "binance_future"  # 交易所名称：binance, binance_future
+    api_key: ""  # 替换为您的对冲账号API密钥
+    api_secret: ""  # 替换为您的对冲账号API密钥
+    is_primary: false  # 非主账号
+    account_alias: "hedge_account"  # 账户别名
+    testnet: false  # 是否使用测试网络
+
+strategies:
+  - id: "doge_usdc_grid"  # 策略ID，必须唯一
+    symbol: "DOGE/USDC"  # 交易对
+    grid_type: "arithmetic"  # 网格类型：arithmetic（等差）或 geometric（等比）
+    low_price: 0.16500  # 网格下限价格
+    high_price: 0.18000  # 网格上限价格
+    grid_number: 15  # 网格数量
+    investment: 100  # 投资额(USDC)
+    leverage: 10  # 杠杆倍数
+    is_future: true  # 是否为合约
+    risk_controls:
+      max_price_deviation: 5  # 最大价格偏差百分比
+      stop_loss: 99  # 止损百分比
+    exchanges:  # 执行该策略的交易所
+      - exchange_id: "binance_future"  # 对应上面的交易所配置
+        account_alias: "main_account"  # 主账户别名
+        position_side: "long"  # 持仓方向：long（做多）
+      - exchange_id: "binance_future"  # 对应上面的交易所配置
+        account_alias: "hedge_account"  # 对冲账户别名
+        position_side: "short"  # 持仓方向：short（做空）
+        hedge_mode: true  # 启用对冲模式
+
+# 通知设置（可选）
+notifications:
+  email:
+    enabled: false  # 是否启用邮件通知
+    smtp_server: "smtp.example.com"
+    smtp_port: 587
+    username: "your_email@example.com"
+    password: "your_email_password"
+    sender: "your_email@example.com"
+    recipients: ["notify_email@example.com"]
+    # 通知事件
+    events:
+      system_start: true  # 系统启动
+      system_stop: true  # 系统停止
+      grid_created: true  # 网格创建
+      order_filled: false  # 订单成交
+      error: true  # 错误发生

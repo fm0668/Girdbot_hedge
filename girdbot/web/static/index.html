@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Girdbot网格量化监控</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Girdbot网格量化监控</h1>
+            <div id="system-status">
+                <span class="status-dot"></span>
+                <span class="status-text">加载中...</span>
+                <span class="uptime"></span>
+            </div>
+        </header>
+
+        <div class="dashboard">
+            <div class="dashboard-item">
+                <h2>概览</h2>
+                <div class="stats-container" id="overview-stats">
+                    <div class="stat-box">
+                        <div class="stat-value" id="total-profit">--</div>
+                        <div class="stat-label">总收益</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="total-trades">--</div>
+                        <div class="stat-label">总交易次数</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="active-orders">--</div>
+                        <div class="stat-label">活跃订单</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="grid-count">--</div>
+                        <div class="stat-label">网格策略数</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-item">
+                <h2>网格策略</h2>
+                <div id="grid-list">
+                    <div class="loading">加载中...</div>
+                </div>
+            </div>
+
+            <div class="dashboard-item">
+                <h2>最近交易</h2>
+                <div id="recent-trades">
+                    <table class="trade-table">
+                        <thead>
+                            <tr>
+                                <th>时间</th>
+                                <th>策略</th>
+                                <th>交易对</th>
+                                <th>方向</th>
+                                <th>价格</th>
+                                <th>数量</th>
+                                <th>收益</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trades-body">
+                            <tr>
+                                <td colspan="7" class="loading">加载中...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>Girdbot_hedge &copy; 2023</p>
+    </footer>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>

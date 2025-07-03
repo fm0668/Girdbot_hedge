@@ -1,0 +1,285 @@
+/* 基础样式 */
+:root {
+    --primary-color: #3498db;
+    --secondary-color: #2ecc71;
+    --dark-color: #2c3e50;
+    --light-color: #ecf0f1;
+    --danger-color: #e74c3c;
+    --warning-color: #f39c12;
+    --box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Arial', sans-serif;
+    background-color: #f5f7fa;
+    color: #333;
+    line-height: 1.6;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+/* 头部样式 */
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #e1e1e1;
+}
+
+header h1 {
+    color: var(--dark-color);
+    font-size: 24px;
+}
+
+#system-status {
+    display: flex;
+    align-items: center;
+}
+
+.status-dot {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 8px;
+    background-color: #999;
+}
+
+.status-dot.running {
+    background-color: var(--secondary-color);
+}
+
+.status-dot.stopped {
+    background-color: var(--danger-color);
+}
+
+.uptime {
+    margin-left: 10px;
+    color: #777;
+    font-size: 14px;
+}
+
+/* 仪表盘样式 */
+.dashboard {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+}
+
+.dashboard-item {
+    background-color: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: var(--box-shadow);
+}
+
+.dashboard-item h2 {
+    margin-bottom: 15px;
+    color: var(--dark-color);
+    font-size: 18px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+}
+
+/* 统计盒子 */
+.stats-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.stat-box {
+    flex: 1;
+    min-width: 120px;
+    background: #f9f9f9;
+    padding: 15px;
+    border-radius: 6px;
+    text-align: center;
+}
+
+.stat-value {
+    font-size: 24px;
+    font-weight: bold;
+    color: var(--primary-color);
+}
+
+.stat-label {
+    font-size: 14px;
+    color: #666;
+    margin-top: 5px;
+}
+
+/* 网格列表 */
+.grid-card {
+    border: 1px solid #e1e1e1;
+    border-radius: 6px;
+    padding: 15px;
+    margin-bottom: 15px;
+    background: #fff;
+}
+
+.grid-card-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.grid-title {
+    font-weight: bold;
+    font-size: 16px;
+}
+
+.grid-status {
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    color: white;
+}
+
+.grid-status.active {
+    background-color: var(--secondary-color);
+}
+
+.grid-status.inactive {
+    background-color: var(--warning-color);
+}
+
+.grid-status.error {
+    background-color: var(--danger-color);
+}
+
+.grid-info {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.grid-info-item {
+    font-size: 14px;
+}
+
+.grid-info-label {
+    color: #666;
+}
+
+.grid-info-value {
+    font-weight: 500;
+}
+
+.grid-progress {
+    margin-top: 10px;
+}
+
+.progress-bar {
+    height: 8px;
+    background-color: #eee;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background-color: var(--primary-color);
+    width: 0;
+    transition: width 0.3s ease;
+}
+
+/* 交易表格 */
+.trade-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.trade-table th, 
+.trade-table td {
+    padding: 10px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+.trade-table th {
+    background-color: #f5f5f5;
+    font-weight: 500;
+}
+
+.trade-table tbody tr:hover {
+    background-color: #f9f9f9;
+}
+
+.trade-direction {
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.trade-direction.buy {
+    color: var(--secondary-color);
+    background-color: rgba(46, 204, 113, 0.1);
+}
+
+.trade-direction.sell {
+    color: var(--danger-color);
+    background-color: rgba(231, 76, 60, 0.1);
+}
+
+.trade-profit {
+    font-weight: 500;
+}
+
+.trade-profit.positive {
+    color: var(--secondary-color);
+}
+
+.trade-profit.negative {
+    color: var(--danger-color);
+}
+
+/* 加载状态 */
+.loading {
+    text-align: center;
+    padding: 20px;
+    color: #777;
+}
+
+/* 底部 */
+footer {
+    text-align: center;
+    margin-top: 40px;
+    padding: 20px;
+    color: #777;
+    font-size: 14px;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+    .dashboard {
+        grid-template-columns: 1fr;
+    }
+    
+    .stats-container {
+        flex-direction: column;
+    }
+    
+    .grid-info {
+        grid-template-columns: 1fr;
+    }
+    
+    .trade-table {
+        font-size: 14px;
+    }
+}

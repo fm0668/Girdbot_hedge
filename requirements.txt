@@ -1,0 +1,8 @@
+aiohttp>=3.8.1
+ccxt>=2.9.11
+pyyaml>=6.0
+colorlog>=6.7.0
+websockets>=10.3
+aiofiles>=0.8.0
+python-dateutil>=2.8.2
+aiohttp_cors>=0.7.0
