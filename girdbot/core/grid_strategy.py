@@ -655,3 +655,12 @@ class GridStrategy:
             "active_orders": self.order_manager.count_active_orders(),
             "last_update": time.ctime(current_time)
         }
+
+    async def shutdown(self):
+        """关闭策略，取消所有挂单"""
+        logger.info(f"正在关闭策略 {self.strategy_id}...")
+        try:
+            await self.cancel_all_orders()
+            logger.info(f"策略 {self.strategy_id} 已成功关闭，所有订单已取消。")
+        except Exception as e:
+            logger.error(f"关闭策略 {self.strategy_id} 时取消订单失败: {e}", exc_info=True)

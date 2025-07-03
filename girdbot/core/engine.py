@@ -177,38 +177,47 @@ class GridEngine:
         return status
     
     async def shutdown(self):
-        """关闭引擎和所有策略"""
-        if not self.is_running and len(self.tasks) == 0:
-            # 关闭交易所连接，即使引擎没有完全初始化
-            logger.info("正在关闭交易所连接...")
+        """关闭引擎和所有策略，确保所有资源被正确释放"""
+        if not self.is_running:
+            logger.info("引擎尚未运行，执行基本清理...")
             await self.exchange_manager.close()
             logger.info("交易所连接已关闭")
             return
-            
+
         logger.info("正在关闭网格交易引擎...")
-        self.is_running = False
+        self.is_running = False  # 停止所有策略循环
+
+        # 1. 优雅地关闭所有策略（包括取消挂单）
+        shutdown_tasks = []
+        for strategy in self.strategies.values():
+            logger.info(f"请求关闭策略: {strategy.strategy_id}")
+            shutdown_tasks.append(asyncio.create_task(strategy.shutdown()))
         
-        # 保存所有策略状态
+        if shutdown_tasks:
+            await asyncio.gather(*shutdown_tasks, return_exceptions=True)
+            logger.info("所有策略已关闭。")
+
+        # 2. 取消引擎的后台任务
+        for task in self.tasks:
+            if not task.done():
+                task.cancel()
+        
+        if self.tasks:
+            await asyncio.gather(*self.tasks, return_exceptions=True)
+            logger.info("所有引擎后台任务已取消。")
+        self.tasks = []
+
+        # 3. 保存所有策略的最终状态
         for strategy in self.strategies.values():
             try:
                 strategy.save_state()
             except Exception as e:
-                logger.error(f"保存策略 {strategy.strategy_id} 状态时出错: {e}")
+                logger.error(f"保存策略 {strategy.strategy_id} 最终状态时出错: {e}")
         
-        # 取消所有任务
-        for task in self.tasks:
-            if not task.done():
-                task.cancel()
-                
-        try:
-            await asyncio.gather(*self.tasks, return_exceptions=True)
-        except asyncio.CancelledError:
-            pass
-            
-        # 关闭交易所连接
+        # 4. 最后关闭交易所连接
         await self.exchange_manager.close()
         
-        logger.info("引擎已关闭")
+        logger.info("引擎已成功关闭")
     
     def get_strategy(self, strategy_id):
         """获取指定ID的策略实例"""
