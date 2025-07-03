@@ -227,7 +227,7 @@ class GridStrategy:
         for i in range(self.grid_levels):
             # 计算价格
             price = self.start_price + (price_step * i)
-            price = round_to_precision(price, price_precision)
+            price = self._adjust_to_precision(price, price_precision)
             
             # 计算金额(以报价货币计)
             amount = amount_per_grid
@@ -291,18 +291,20 @@ class GridStrategy:
             # 获取交易所精度信息
             price_precision, amount_precision = await self.get_exchange_precision()
             
+            # 确保价格符合精度要求
+            price = self._adjust_to_precision(level.price, price_precision)
+
             # 计算买单数量(基础货币)
-            base_amount = level.amount / level.price
-            base_amount = round_to_precision(base_amount, amount_precision)
+            base_amount = self._adjust_to_precision(level.amount / price, amount_precision)
             
-            logger.info(f"在价格 {level.price} 创建买单，金额: {base_amount}")
+            logger.info(f"在价格 {price} 创建买单，金额: {base_amount}")
             
             # 创建买单
             order_id = await self.primary_exchange.create_limit_order(
                 symbol=self.trading_pair,
                 side="buy",
-                amount=base_amount,
-                price=level.price
+                amount=float(base_amount),
+                price=float(price)
             )
             
             # 更新级别状态
@@ -330,7 +332,7 @@ class GridStrategy:
             return order_id
             
         except Exception as e:
-            logger.error(f"创建买单失败: {e}")
+            logger.error(f"创建买单失败: {e}", exc_info=True)
             return None
     
     async def place_sell_order(self, level: GridLevel):
@@ -338,19 +340,21 @@ class GridStrategy:
         try:
             # 获取交易所精度信息
             price_precision, amount_precision = await self.get_exchange_precision()
+
+            # 确保价格符合精度要求
+            price = self._adjust_to_precision(level.price, price_precision)
             
             # 计算卖单数量(基础货币)
-            base_amount = level.amount / level.price
-            base_amount = round_to_precision(base_amount, amount_precision)
+            base_amount = self._adjust_to_precision(level.amount / price, amount_precision)
             
-            logger.info(f"在价格 {level.price} 创建卖单，金额: {base_amount}")
+            logger.info(f"在价格 {price} 创建卖单，金额: {base_amount}")
             
             # 创建卖单
             order_id = await self.primary_exchange.create_limit_order(
                 symbol=self.trading_pair,
                 side="sell",
-                amount=base_amount,
-                price=level.price
+                amount=float(base_amount),
+                price=float(price)
             )
             
             # 更新级别状态
@@ -378,7 +382,7 @@ class GridStrategy:
             return order_id
             
         except Exception as e:
-            logger.error(f"创建卖单失败: {e}")
+            logger.error(f"创建卖单失败: {e}", exc_info=True)
             return None
     
     async def handle_order_filled(self, order_id, order_info):
@@ -497,13 +501,21 @@ class GridStrategy:
         buy_cost = Decimal("0")
         sell_revenue = Decimal("0")
         
+        # 确保 trades 是一个列表
+        if asyncio.iscoroutine(trades):
+            trades = await trades
+
         for trade in trades:
-            if trade["side"] == "buy":
-                buy_volume += Decimal(str(trade["amount"]))
-                buy_cost += Decimal(str(trade["amount"])) * Decimal(str(trade["price"]))
+            side = trade.get("side")
+            price = Decimal(str(trade.get("price", "0")))
+            amount = Decimal(str(trade.get("amount", "0")))
+            
+            if side == "buy":
+                buy_volume += amount
+                buy_cost += amount * price
             else:  # sell
-                sell_volume += Decimal(str(trade["amount"]))
-                sell_revenue += Decimal(str(trade["amount"])) * Decimal(str(trade["price"]))
+                sell_volume += amount
+                sell_revenue += amount * price
         
         # 计算已实现收益
         if sell_revenue > Decimal("0"):
@@ -541,17 +553,21 @@ class GridStrategy:
     async def get_exchange_precision(self) -> Tuple[Decimal, Decimal]:
         """获取交易所对当前交易对的精度要求"""
         try:
-            # 获取交易对信息
-            market_info = await self.primary_exchange.fetch_market_info(self.trading_pair)
+            market = await self.primary_exchange.load_market(self.trading_pair)
             
-            price_precision = Decimal(f"0.{'0' * (market_info.get('precision', {}).get('price', 8) - 1)}1")
-            amount_precision = Decimal(f"0.{'0' * (market_info.get('precision', {}).get('amount', 8) - 1)}1")
-            
-            return price_precision, amount_precision
+            price_precision_val = market.get("precision", {}).get("price")
+            amount_precision_val = market.get("precision", {}).get("amount")
+
+            if price_precision_val is None or amount_precision_val is None:
+                logger.error(f"无法从交易所获取精度信息: price={price_precision_val}, amount={amount_precision_val}")
+                # 提供一个默认的高精度值，避免程序崩溃
+                return (Decimal("0.00000001"), Decimal("0.00000001"))
+
+            return (Decimal(str(price_precision_val)), Decimal(str(amount_precision_val)))
         except Exception as e:
-            logger.error(f"获取交易所精度失败: {e}")
-            # 返回默认精度
-            return Decimal("0.00000001"), Decimal("0.00000001")
+            logger.error(f"获取交易所精度时发生未知错误: {e}", exc_info=True)
+            # 异常情况下也返回默认值
+            return (Decimal("0.00000001"), Decimal("0.00000001"))
     
     def save_state(self):
         """保存当前策略状态"""
@@ -599,6 +615,28 @@ class GridStrategy:
             
         except Exception as e:
             logger.error(f"恢复状态失败: {e}")
+    
+    def _adjust_to_precision(self, value: Decimal, precision: Decimal) -> Decimal:
+        """
+        将数值调整到指定的精度，增加健壮性检查
+        
+        Args:
+            value: 要调整的值
+            precision: 精度
+        
+        Returns:
+            调整后的值
+        """
+        if not isinstance(value, Decimal) or not isinstance(precision, Decimal):
+            logger.error(f"调整精度失败：无效的输入类型 value: {type(value)}, precision: {type(precision)}")
+            raise TypeError("Value and precision must be Decimal objects.")
+        
+        if precision <= 0:
+            logger.error(f"调整精度失败：无效的精度值 {precision}")
+            # 返回原始值或根据业务逻辑处理
+            return value
+            
+        return (value / precision).quantize(Decimal('1'), rounding=ROUND_DOWN) * precision
     
     def get_status(self):
         """获取策略状态信息"""
