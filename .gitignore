@@ -42,3 +42,9 @@ data/logs/*
 # 操作系统相关
 .DS_Store
 Thumbs.db 
+
+# 不推送参考策略代码
+参考策略代码/
+
+# 不推送README.md
+README.md
